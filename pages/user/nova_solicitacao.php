@@ -21,17 +21,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id_tinta = $_POST['tinta'];
     $destino_pintura = $_POST['destino_pintura'];
 
-    // Insere a solicitação no banco de dados
-    $insert_query = "INSERT INTO solicitacoes (id_usuario, id_tinta, destino_pintura, status_solicitacao, data_solicitacao) 
-                     VALUES (?, ?, ?, 'pendente', NOW())";
-    $insert_stmt = $conn->prepare($insert_query);
-    $insert_stmt->bind_param('iis', $user_id, $id_tinta, $destino_pintura);
+    // Verificar se o usuário já solicitou a tinta
+    $check_query = "SELECT * FROM solicitacoes WHERE id_usuario = ? AND id_tinta = ?";
+    $check_stmt = $conn->prepare($check_query);
+    $check_stmt->bind_param('ii', $user_id, $id_tinta);
+    $check_stmt->execute();
+    $check_result = $check_stmt->get_result();
 
-    if ($insert_stmt->execute()) {
-        header('Location: solicitar_tinta.php');
-        exit;
+    // Se a tinta já foi solicitada, exibe mensagem de erro
+    if ($check_result->num_rows > 0) {
+        $error_message = 'Você já solicitou esta tinta.';
     } else {
-        $error_message = 'Erro ao registrar a solicitação. Tente novamente.';
+        // Se não foi solicitada, insere a solicitação no banco de dados
+        $insert_query = "INSERT INTO solicitacoes (id_usuario, id_tinta, destino_pintura, status_solicitacao, data_solicitacao) 
+                         VALUES (?, ?, ?, 'pendente', NOW())";
+        $insert_stmt = $conn->prepare($insert_query);
+        $insert_stmt->bind_param('iis', $user_id, $id_tinta, $destino_pintura);
+
+        if ($insert_stmt->execute()) {
+            header('Location: solicitar_tinta.php');
+            exit;
+        } else {
+            $error_message = 'Erro ao registrar a solicitação. Tente novamente.';
+        }
     }
 }
 ?>
@@ -86,9 +98,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <label for="tinta" class="form-label">Selecione a Tinta</label>
                                 <select class="form-select" id="tinta" name="tinta" required>
                                     <option value="" disabled selected>Escolha uma tinta</option>
-                                    <?php while ($row = $tintas->fetch_assoc()) { ?>
-                                        <option value="<?php echo $row['cod_tinta']; ?>">
+                                    <?php while ($row = $tintas->fetch_assoc()) { 
+                                        // Verifica se a tinta já foi solicitada
+                                        $tinta_solicitada_query = "SELECT * FROM solicitacoes WHERE id_usuario = ? AND id_tinta = ?";
+                                        $tinta_solicitada_stmt = $conn->prepare($tinta_solicitada_query);
+                                        $tinta_solicitada_stmt->bind_param('ii', $user_id, $row['cod_tinta']);
+                                        $tinta_solicitada_stmt->execute();
+                                        $tinta_solicitada_result = $tinta_solicitada_stmt->get_result();
+                                    ?>
+                                        <option value="<?php echo $row['cod_tinta']; ?>" 
+                                            <?php echo ($tinta_solicitada_result->num_rows > 0) ? 'disabled' : ''; ?>>
                                             <?php echo $row['cor'] . ' - ' . $row['marca'] . ' (' . $row['volume'] . 'L)'; ?>
+                                            <?php if ($tinta_solicitada_result->num_rows > 0) { ?>
+                                                <span class="text-muted"> - Tinta já solicitada</span>
+                                            <?php } ?>
                                         </option>
                                     <?php } ?>
                                 </select>

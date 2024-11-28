@@ -10,9 +10,24 @@ include '../../includes/bd.php';
 // ID do usuário logado
 $user_id = $_SESSION['user_id'];
 
-// Consulta para pegar as tintas liberadas para solicitação
-$query = "SELECT cod_tinta, cor, volume, marca FROM tintas WHERE liberada = 1";
+// Consulta para pegar as tintas liberadas para solicitação, sem as já retiradas
+// Consulta para pegar as tintas liberadas para solicitação, sem as já retiradas
+$query = "
+    SELECT t.cod_tinta, t.cor, t.volume, t.marca
+    FROM tintas t
+    WHERE t.liberada = 1
+    AND NOT EXISTS (
+        SELECT 1
+        FROM solicitacoes s
+        WHERE s.id_usuario = ? 
+        AND s.id_tinta = t.cod_tinta
+        AND (s.data_retirada IS NULL OR s.data_retirada != '0000-00-00')
+    )
+";
+
+
 $stmt = $conn->prepare($query);
+$stmt->bind_param('i', $user_id);
 $stmt->execute();
 $tintas = $stmt->get_result();
 
@@ -98,20 +113,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <label for="tinta" class="form-label">Selecione a Tinta</label>
                                 <select class="form-select" id="tinta" name="tinta" required>
                                     <option value="" disabled selected>Escolha uma tinta</option>
-                                    <?php while ($row = $tintas->fetch_assoc()) { 
-                                        // Verifica se a tinta já foi solicitada
-                                        $tinta_solicitada_query = "SELECT * FROM solicitacoes WHERE id_usuario = ? AND id_tinta = ?";
-                                        $tinta_solicitada_stmt = $conn->prepare($tinta_solicitada_query);
-                                        $tinta_solicitada_stmt->bind_param('ii', $user_id, $row['cod_tinta']);
-                                        $tinta_solicitada_stmt->execute();
-                                        $tinta_solicitada_result = $tinta_solicitada_stmt->get_result();
-                                    ?>
-                                        <option value="<?php echo $row['cod_tinta']; ?>" 
-                                            <?php echo ($tinta_solicitada_result->num_rows > 0) ? 'disabled' : ''; ?>>
+                                    <?php while ($row = $tintas->fetch_assoc()) { ?>
+                                        <option value="<?php echo $row['cod_tinta']; ?>">
                                             <?php echo $row['cor'] . ' - ' . $row['marca'] . ' (' . $row['volume'] . 'L)'; ?>
-                                            <?php if ($tinta_solicitada_result->num_rows > 0) { ?>
-                                                <span class="text-muted"> - Tinta já solicitada</span>
-                                            <?php } ?>
                                         </option>
                                     <?php } ?>
                                 </select>
